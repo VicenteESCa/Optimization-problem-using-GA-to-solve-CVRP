@@ -4,15 +4,16 @@ import random
 import math
 import matplotlib.pyplot as plt
 
+""" Si se desea no mostrar graficamente poner las comillas en el final de esta funcion. Las comillas:-> """
 #Funcion para graficar el mambo: 
-# Función para graficar la ruta con flechas y el mismo color de ida y vuelta
 def graficar_ruta(ruta, generacion):
     plt.figure(figsize=(10, 6))
 
     # Graficamos las rutas de los clientes
     for cluster in ruta:
         x = [cliente[0] for cliente in cluster]
-        y = [cliente[1] for cliente in cluster]
+        y = [cliente[1] for cliente in cluster if cliente and len(cliente) > 1]
+
         
         # Generamos un color único para cada clúster
         color = np.random.rand(3,)  # Un color aleatorio para cada clúster
@@ -84,6 +85,7 @@ def leer_archivo_vrp(ruta_archivo):
 
 #Declaracion de variables
 capacidadMaxima, deposito, listaClientes, demandas = leer_archivo_vrp('./Facil.vrp')
+
 # Ejemplo de uso
 def calcular_Angulo(cliente):
     x, y = cliente
@@ -185,27 +187,41 @@ def mutar(individuo, prob_Mutar = 0.02):
             cluster[i], cluster[j] = cluster[j], cluster[i]   
 
 # Algoritmo genetico de Chu-Beasly 
-def algoritmo_Genetico(clusters, tamaño_Poblacional=10, generaciones = 100, prob_Mutar=0.02, minimo_de_Mejora = 0.001):
+def algoritmo_Genetico(clusters, tamaño_Poblacional, maximo_sin_mejora, determina_boole, generaciones = 100, prob_Mutar=0.01):
     
     poblacion = generador_de_PI(clusters, tamaño_Poblacional)
-    mejor_Puntuacion = float('inf') #Metodo para definir como infinito positivo
+    mejor_Puntuacion_Global = float('inf') #Metodo para definir como infinito positivoc d
     generaciones_Sin_Mejora = 0
+    mejor_solucion_Global = None
+    numero_De_Generacion = 0
 
     for generacion in range(generaciones):
+
         puntuaciones = [sum(calculo_Total_Distancia(cluster) for cluster in individuo) for individuo in poblacion]
         mejor_Puntuacion_Actual = min(puntuaciones)
 
+        # Encontrar la mejor ruta de esta generación
+        mejor_ruta_generacion = min(poblacion, key=lambda ind: sum(calculo_Total_Distancia(cluster) for cluster in ind))
+        
         print(f"Generación {generacion + 1} - Mejor puntuación: {mejor_Puntuacion_Actual}")
         print(f"Mejor ruta en esta generación:")
 
         #Check de mehora significativa
-        if mejor_Puntuacion - mejor_Puntuacion_Actual > minimo_de_Mejora:
-            mejor_Puntuacion = mejor_Puntuacion_Actual
-            generaciones_Sin_Mejora = 0
+
+        if mejor_Puntuacion_Actual < mejor_Puntuacion_Global:
+            mejor_Puntuacion_Global = mejor_Puntuacion_Actual
+            mejor_solucion_Global = mejor_ruta_generacion
+            numero_De_Generacion = generacion
+            print(f"Nuevo óptimo global encontrado: {mejor_Puntuacion_Global}")
+            if determina_boole == True:
+                graficar_ruta(mejor_solucion_Global, numero_De_Generacion)
+                generaciones_Sin_Mejora = 0
+            else:
+                generaciones_Sin_Mejora = 0
         else:
             generaciones_Sin_Mejora += 1
         
-        if generaciones_Sin_Mejora >= 10:
+        if generaciones_Sin_Mejora >= maximo_sin_mejora:
             break
 
         #Crear nueva generacion
@@ -219,15 +235,28 @@ def algoritmo_Genetico(clusters, tamaño_Poblacional=10, generaciones = 100, pro
             mutar(hijo2, prob_Mutar)
             generacion_Siguiente.extend([hijo1, hijo2])
         
+
         poblacion = generacion_Siguiente
 
-        mejor_ruta_generacion = min(poblacion, key=lambda ind: sum(calculo_Total_Distancia(cluster) for cluster in ind))
-        graficar_ruta(mejor_ruta_generacion, generacion)
+    if mejor_Puntuacion_Global:
+        graficar_ruta(mejor_ruta_generacion, generacion) # <- Esta linea
 
-    mejor_Solucion = min(poblacion, key=lambda ind: sum(calculo_Total_Distancia(cluster) for cluster in ind))
-    return mejor_Solucion
+    return mejor_solucion_Global, mejor_Puntuacion_Global, numero_De_Generacion
 
 
-mejor_Ruta = algoritmo_Genetico(clusters)
-print("Mejor ruta:", mejor_Ruta)
+
+tam_Poblacional = int(input("Defina el tamaño poblacional de las generaciones: "))
+max_mejora = int(input(f"Defina el maximo de generaciones sin tener una mejora: "))
+ver_Optimos = input("Determine con Y / N si desea ver los optimos cada que se encuentra uno nuevo: ")
+condicion_del_booleano = None
+if ver_Optimos == "Y":
+    condicion_del_booleano = True
+else:
+    condicion_del_booleano = False
+mejor_Ruta , mejor_Puntuacion, Numero_De_Generacion = algoritmo_Genetico(clusters, tam_Poblacional, max_mejora, condicion_del_booleano)
+print(f"Mejor ruta encontrada {mejor_Ruta}")
+print(f"Con una puntuacion de: {mejor_Puntuacion}")
+graficar_ruta(mejor_Ruta, Numero_De_Generacion)
+
+
 
