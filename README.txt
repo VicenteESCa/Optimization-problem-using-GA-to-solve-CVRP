@@ -7,5 +7,18 @@ no se como funcione en linux o MAC.
 
 Si se desea ejecutar el modelo con la instancia dificil.
 cd dificil
-si tiene la extension de code runner:
-CTRL + ALT + N
+
+Si se desea ejecutar el modelo con la instancia Medi0.
+cd medio
+
+Si se desea ejecutar el modelo con la instancia Facil.
+cd Facil
+
+El programa esta pensado para funcionar de forma interactiva, por lo que tendra 
+la posibilidad de modificar ciertos valores ejecutando el codigo.
+
+Estas decisiones son:
+ - Definir el tamaño poblacional por generacion
+ - Definir un minimo de generaciones que no tengan una mejora significativa
+ - Definir si desea ver graficamente cada vez que se encuentra un optimo local nuevo,
+ esto conta con dos alternativas: Y / N 
