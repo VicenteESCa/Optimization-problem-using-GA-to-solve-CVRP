@@ -6,13 +6,17 @@ Para detener la muestra grafica presionar Ctrl + C varias veces en la consola, e
 no se como funcione en linux o MAC.
 
 Si se desea ejecutar el modelo con la instancia dificil.
+"""
 cd dificil
-
+"""
 Si se desea ejecutar el modelo con la instancia Medi0.
+"""
 cd medio
-
+"""
 Si se desea ejecutar el modelo con la instancia Facil.
+"""
 cd Facil
+"""
 
 El programa esta pensado para funcionar de forma interactiva, por lo que tendra 
 la posibilidad de modificar ciertos valores ejecutando el codigo.
