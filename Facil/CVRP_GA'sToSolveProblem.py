@@ -91,6 +91,8 @@ def calcular_Angulo(cliente):
     x, y = cliente
     return math.atan2(y - deposito[1], x - deposito[0])
 
+# Esta heuristica de barrido crea clusters de clientes basados en el angulo desde el deposito, los ordena
+# y los agrupa segun la capacidad maxima del vehiculo igualando la demanda de los clientes en cada cluster mas su carga actual.
 def heuristica_Barrido(listaClientes, demandas, capacidadMaxima):
     angulos= [(cliente, demanda, calcular_Angulo(cliente)) 
               for  cliente, demanda in zip(listaClientes, demandas)]
@@ -127,6 +129,7 @@ def calculo_Total_Distancia(ruta):
         #Distancia euclediana calculando la norma del vector
         distancia_Total += np.linalg.norm(np.array(punto_Actual) - np.array(cliente))
         punto_Actual = cliente
+
     distancia_Total += np.linalg.norm(np.array(punto_Actual) - np.array(deposito))
     
     return distancia_Total
@@ -186,6 +189,36 @@ def mutar(individuo, prob_Mutar = 0.02):
             i, j = random.sample(range(len(cluster)), 2)
             cluster[i], cluster[j] = cluster[j], cluster[i]   
 
+def Simulated_Annealing(ruta, temp_inicial=1000, factor_enfriamiento=0.95, iteraciones_por_temp=50):
+    current_route = ruta.copy()
+    current_cost = calculo_Total_Distancia(current_route)
+    best_route = current_route.copy()
+    best_cost = current_cost
+    temp = temp_inicial
+
+    while temp > 1e-3:
+        for _ in range(iteraciones_por_temp):
+            # Generar una nueva solución vecina
+            new_route = current_route.copy()
+            idx1, idx2 = random.sample(range(len(new_route)), 2)
+            new_route[idx1], new_route[idx2] = new_route[idx2], new_route[idx1]
+            new_cost = calculo_Total_Distancia(new_route)
+
+            delta = new_cost - current_cost
+            
+            # Criterio de aceptacion 
+            if delta < 0 or random.random() < math.exp(-delta / temp):
+                current_route = new_route
+                current_cost = new_cost
+                
+                # Actualizar la mejor solución encontrada
+                if current_cost < best_cost:
+                    best_route = current_route.copy()
+                    best_cost = current_cost
+        # Enfriar la temperatura
+        temp *= factor_enfriamiento
+    return best_route
+
 # Algoritmo genetico de Chu-Beasly 
 def algoritmo_Genetico(clusters, tamaño_Poblacional, maximo_sin_mejora, determina_boole, generaciones = 100, prob_Mutar=0.01):
     
@@ -194,6 +227,8 @@ def algoritmo_Genetico(clusters, tamaño_Poblacional, maximo_sin_mejora, determi
     generaciones_Sin_Mejora = 0
     mejor_solucion_Global = None
     numero_De_Generacion = 0
+
+    umbral_SA = maximo_sin_mejora // 2
 
     for generacion in range(generaciones):
 
@@ -234,7 +269,22 @@ def algoritmo_Genetico(clusters, tamaño_Poblacional, maximo_sin_mejora, determi
             mutar(hijo1, prob_Mutar)
             mutar(hijo2, prob_Mutar)
             generacion_Siguiente.extend([hijo1, hijo2])
-        
+
+        # Aplicar Simulated Annealing en caso de estancarse
+        if generaciones_Sin_Mejora >= umbral_SA:
+            print("Estancamiento detectado, aplicando SA...")
+            puntuaciones_nuevas = [sum(calculo_Total_Distancia(cluster) for cluster in individuo) for individuo in generacion_Siguiente]
+            mejor_indice_nuevo = np.argmin(puntuaciones_nuevas)
+            mejor_individuo_nuevo = generacion_Siguiente[mejor_indice_nuevo]
+
+            # SA a cada cluster del mejor individuo nuevo
+            for i in range(len(mejor_individuo_nuevo)):
+                cluster = mejor_individuo_nuevo[i]
+                if len(cluster) > 1:
+                    cluster_mejorado = Simulated_Annealing(cluster)
+                    mejor_individuo_nuevo[i] = cluster_mejorado
+            peor_indice_nuevo = np.argmax(puntuaciones_nuevas)
+            generacion_Siguiente[peor_indice_nuevo] = mejor_individuo_nuevo
 
         poblacion = generacion_Siguiente
 
