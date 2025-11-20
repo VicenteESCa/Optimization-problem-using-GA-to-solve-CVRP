@@ -1,259 +1,238 @@
-# inicio dle trabajo de optimizacion
 import numpy as np
 import random
 import math
 import matplotlib.pyplot as plt
+import copy
 
-""" Si se desea no mostrar graficamente poner las comillas en el final de esta funcion y en la linea 227. Las comillas:-> """
-#Funcion para graficar el mambo: 
-def graficar_ruta(ruta, generacion):
-    plt.figure(figsize=(10, 6))
-
-    # Graficamos las rutas de los clientes
-    for cluster in ruta:
-        x = [cliente[0] for cliente in cluster]
-        y = [cliente[1] for cliente in cluster]
-        
-        # Generamos un color único para cada clúster
-        color = np.random.rand(3,)  # Un color aleatorio para cada clúster
-        
-        # Graficamos la ruta del clúster (ida)
-        plt.plot(x, y, marker='o', linestyle='--', color=color, markersize=5)
-        
-        # Agregar la flecha de ida (del depósito al primer cliente)
-        plt.annotate('', xy=(x[0], y[0]), xytext=(deposito[0], deposito[1]),
-                     arrowprops=dict(facecolor=color, edgecolor=color, arrowstyle="->", lw=1.5))
-        
-        # Agregar la flecha de vuelta (del último cliente al depósito)
-        plt.annotate('', xy=(deposito[0], deposito[1]), xytext=(x[-1], y[-1]),
-                     arrowprops=dict(facecolor=color, edgecolor=color, arrowstyle="->", lw=1.5))
-
-    # Graficamos el depósito
-    deposito_x, deposito_y = deposito
-    plt.plot(deposito_x, deposito_y, marker='D', color='red', markersize=10)
-
-    # Título y etiquetas
-    plt.title(f"Generación {generacion + 1} - Mejor Ruta")
-    plt.xlabel("Coordenada X")
-    plt.ylabel("Coordenada Y")
-    plt.grid(True)
-    plt.show()
-
- # <- aqui habria que poner las comillas
-
-#Leer estructura del archivo:
+# --- 1. LECTURA Y PREPARACIÓN DE DATOS (Igual que antes) ---
 def leer_archivo_vrp(ruta_archivo):
     with open(ruta_archivo, 'r') as archivo:
         lineas = archivo.readlines()
-    
-    capacidad = None
-    deposito = None
-    listaClientes = []
-    demandas = []
-    
+    capacidad = None; deposito = None; listaClientes = []; demandas = []
     seccion = None
-    
     for linea in lineas:
         linea = linea.strip()
-        
-        if linea.startswith("CAPACITY"):
-            capacidad = int(linea.split(":")[1].strip())
-        elif linea == "NODE_COORD_SECTION":
-            seccion = "NODE_COORD_SECTION"
-        elif linea == "DEMAND_SECTION":
-            seccion = "DEMAND_SECTION"
-        elif linea == "DEPOT_SECTION":
-            seccion = "DEPOT_SECTION"
-        elif linea == "EOF":
-            break
+        if linea.startswith("CAPACITY"): capacidad = int(linea.split(":")[1].strip())
+        elif linea == "NODE_COORD_SECTION": seccion = "NODE_COORD_SECTION"
+        elif linea == "DEMAND_SECTION": seccion = "DEMAND_SECTION"
+        elif linea == "DEPOT_SECTION": seccion = "DEPOT_SECTION"
+        elif linea == "EOF": break
         elif seccion == "NODE_COORD_SECTION":
             partes = linea.split()
-            id_cliente = int(partes[0])
-            x = int(partes[1])
-            y = int(partes[2])
-            listaClientes.append((x, y))
+            listaClientes.append((int(partes[1]), int(partes[2])))
         elif seccion == "DEMAND_SECTION":
             partes = linea.split()
-            id_cliente = int(partes[0])
-            demanda = int(partes[1])
-            demandas.append(demanda)
+            demandas.append(int(partes[1]))
         elif seccion == "DEPOT_SECTION":
-            if int(linea) != -1:
-                deposito = listaClientes[int(linea) - 1]
-
+            if int(linea) != -1: deposito = listaClientes[int(linea) - 1]
     return capacidad, deposito, listaClientes, demandas
 
-#Declaracion de variables
 capacidadMaxima, deposito, listaClientes, demandas = leer_archivo_vrp('./Medio.vrp')
+mapa_demandas = {cliente: demanda for cliente, demanda in zip(listaClientes, demandas)}
 
-# Ejemplo de uso
-def calcular_Angulo(cliente):
-    x, y = cliente
-    return math.atan2(y - deposito[1], x - deposito[0])
+def obtener_demanda_ruta(ruta):
+    return sum(mapa_demandas[cliente] for cliente in ruta)
 
-def heuristica_Barrido(listaClientes, demandas, capacidadMaxima):
-    angulos= [(cliente, demanda, calcular_Angulo(cliente)) 
-              for  cliente, demanda in zip(listaClientes, demandas)]
-    angulos.sort(key = lambda x: x[2]) #ordenar por angulo
-
-    clusters = []
-    cluster_Actual=[]
-    carga_Actual = 0
-
-    for cliente, demanda, angulos in angulos:
-        if carga_Actual + demanda <= capacidadMaxima:
-            cluster_Actual.append(cliente)
-            carga_Actual += demanda
-        else:
-            clusters.append(cluster_Actual)
-            cluster_Actual = [cliente]
-            carga_Actual = demanda
-    if cluster_Actual:
-        clusters.append(cluster_Actual)
-    
-    return clusters
-
-#Realiza la heuristica de barrido
-clusters = heuristica_Barrido(listaClientes, demandas, capacidadMaxima)
-print("Clusters generados:", clusters)
-
-# Funciones del algoritmo genetico
-
-#Distancia toal de una ruta
 def calculo_Total_Distancia(ruta):
     distancia_Total = 0
     punto_Actual = deposito
     for cliente in ruta:
-        #Distancia euclediana calculando la norma del vector
         distancia_Total += np.linalg.norm(np.array(punto_Actual) - np.array(cliente))
         punto_Actual = cliente
     distancia_Total += np.linalg.norm(np.array(punto_Actual) - np.array(deposito))
-    
     return distancia_Total
 
-# Generador inicial de la poblacion, utilizare las siglas PI para hacer entender que es PoblacionInicial
-def generador_de_PI(clusters, tamaño_Poblacion=10):
-    pobladores = []
+def graficar_ruta(ruta, generacion):
+    plt.figure(figsize=(10, 6))
+    for cluster in ruta:
+        x = [c[0] for c in cluster]; y = [c[1] for c in cluster]
+        color = np.random.rand(3,)
+        plt.plot(x, y, marker='o', linestyle='--', color=color)
+        if x: # Flechas deposito
+            plt.plot([deposito[0], x[0]], [deposito[1], y[0]], color=color, linestyle='-')
+            plt.plot([x[-1], deposito[0]], [y[-1], deposito[1]], color=color, linestyle='-')
+    plt.plot(deposito[0], deposito[1], marker='D', color='red', markersize=10)
+    plt.title(f"Generación {generacion} - Mejor Ruta"); plt.show()
 
-    for i in range(tamaño_Poblacion):
-        individuo = [random.sample(cluster, len(cluster)) 
-                     for cluster in clusters]
-        pobladores.append(individuo)
+# --- 2. HEURÍSTICA INICIAL (Igual que antes) ---
+def calcular_Angulo(cliente):
+    return math.atan2(cliente[1] - deposito[1], cliente[0] - deposito[0])
+
+def heuristica_Barrido(listaClientes, demandas, capacidadMaxima):
+    angulos= [(cliente, demanda, calcular_Angulo(cliente)) for cliente, demanda in zip(listaClientes, demandas)]
+    angulos.sort(key = lambda x: x[2])
+    clusters = []; cluster_Actual=[]; carga_Actual = 0
+    for cliente, demanda, _ in angulos:
+        if carga_Actual + demanda <= capacidadMaxima:
+            cluster_Actual.append(cliente); carga_Actual += demanda
+        else:
+            clusters.append(cluster_Actual); cluster_Actual = [cliente]; carga_Actual = demanda
+    if cluster_Actual: clusters.append(cluster_Actual)
+    return clusters
+
+clusters_iniciales = heuristica_Barrido(listaClientes, demandas, capacidadMaxima)
+
+# --- 3. OPERADORES GENÉTICOS (Aquí están los cambios MÍNIMOS NECESARIOS) ---
+
+def generador_de_PI(clusters, tamaño_Poblacion):
+    return [[random.sample(c, len(c)) for c in clusters] for _ in range(tamaño_Poblacion)]
+
+def seleccion_Torneo(poblacion, puntuaciones, k=3):
+    seleccionados = random.sample(range(len(poblacion)), k)
+    mejor = min(seleccionados, key=lambda i: puntuaciones[i])
+    return poblacion[mejor]
+
+# CAMBIO NECESARIO 1: Crossover que soporta rutas de diferente tamaño
+def crossover_Robusto(padre, madre):
+    """
+    Crossover que inyecta una ruta de la madre en el padre,
+    asegurando que NO se pierdan ni dupliquen clientes.
+    """
+    # 1. Clonamos al padre para usarlo de base
+    hijo = copy.deepcopy(padre)
     
-    return pobladores
-
-#Metodo de seleccion: Metodo de la ruleta
-def seleccion_Ruleta(poblacion, puntuaciones):
-    fitness_Total = sum( 1 / puntuacion for puntuacion in puntuaciones)
-    eleccion = random.uniform(0, fitness_Total)
-    actual = 0
-
-    for individuo, puntuacion in zip(poblacion, puntuaciones):
-        actual += 1 / puntuacion
-        
-        if actual > eleccion:
-            return individuo
-        
-# Crossover parametrizado uniforme con reparacion
-def crossover_Parametrizado_Uniforme(padre, madre, probabilidad = 0.5):
-    hijo = [None] * len(padre)
-    genes_Usados = set()
-
-    # Adicion del material genetico
-    for i in range(len(padre)):
-        if random.random() < probabilidad and padre[i] not in genes_Usados:
-            hijo[i] = padre[i]
-            genes_Usados.add(padre[i])
-        elif madre[i] not in genes_Usados:
-            hijo[i] = madre[i]
-            genes_Usados.add(madre[i])
-
-    # Completacion de genes faltantes
-    for i in range(len(hijo)):
-        if hijo[i] is None:
-            for gen in padre:
-                if gen not in genes_Usados:
-                    hijo[i] = gen
-                    genes_Usados.add(gen)
-                    break
+    # 2. Elegimos UNA ruta aleatoria de la madre para inyectar
+    # (Esto ayuda a traer "buenas ideas" de agrupamiento de la madre)
+    if not madre: return hijo
+    ruta_madre = random.choice(madre)
+    
+    # Lista de clientes que vamos a insertar (los de esa ruta de la madre)
+    clientes_a_insertar = set(tuple(c) for c in ruta_madre)
+    
+    # 3. Limpieza: Eliminamos esos clientes del 'hijo' (base padre)
+    # Iteramos sobre todas las rutas del hijo
+    for ruta in hijo:
+        # Iteramos al revés para poder borrar elementos sin romper el índice del bucle
+        for i in range(len(ruta) - 1, -1, -1):
+            if tuple(ruta[i]) in clientes_a_insertar:
+                del ruta[i]
+    
+    # 4. Inserción: Agregamos la ruta de la madre tal cual al hijo
+    hijo.append(copy.deepcopy(ruta_madre))
+    
+    # 5. Limpieza final: Borramos rutas que hayan quedado vacías tras la extracción
+    hijo = [ruta for ruta in hijo if len(ruta) > 0]
     
     return hijo
 
-# Mutacion controlada
-def mutar(individuo, prob_Mutar = 0.02):
-    for cluster in individuo:
-        if len(cluster)>1 and random.random()<prob_Mutar:
-            i, j = random.sample(range(len(cluster)), 2)
-            cluster[i], cluster[j] = cluster[j], cluster[i]   
+# CAMBIO NECESARIO 2: Mutación normal (orden)
+def mutar_orden(individuo, prob=0.05):
+    for ruta in individuo:
+        if len(ruta) > 1 and random.random() < prob:
+            i, j = random.sample(range(len(ruta)), 2)
+            ruta[i], ruta[j] = ruta[j], ruta[i]
 
-# Algoritmo genetico de Chu-Beasly 
-def algoritmo_Genetico(clusters, tamaño_Poblacional, maximo_sin_mejora, determina_boole, generaciones = 100, prob_Mutar=0.01):
+# CAMBIO NECESARIO 3: Mutación de TRANSFERENCIA (La clave para bajar de 2000)
+def mutar_transferencia(individuo, prob=0.3):
+    if random.random() > prob: return
     
-    poblacion = generador_de_PI(clusters, tamaño_Poblacional)
-    mejor_Puntuacion_Global = float('inf') #Metodo para definir como infinito positivoc d
-    generaciones_Sin_Mejora = 0
-    mejor_solucion_Global = None
-    numero_De_Generacion = 0
+    # Elegir ruta origen y destino
+    rutas_idx = list(range(len(individuo)))
+    if len(rutas_idx) < 2: return
+    idx_ori, idx_des = random.sample(rutas_idx, 2)
+    
+    if not individuo[idx_ori]: return
+    
+    # Intentar mover cliente
+    cliente = random.choice(individuo[idx_ori])
+    if obtener_demanda_ruta(individuo[idx_des]) + mapa_demandas[cliente] <= capacidadMaxima:
+        individuo[idx_ori].remove(cliente)
+        individuo[idx_des].insert(random.randint(0, len(individuo[idx_des])), cliente)
 
-    for generacion in range(generaciones):
-
-        puntuaciones = [sum(calculo_Total_Distancia(cluster) for cluster in individuo) for individuo in poblacion]
-        mejor_Puntuacion_Actual = min(puntuaciones)
-
-        # Encontrar la mejor ruta de esta generación
-        mejor_ruta_generacion = min(poblacion, key=lambda ind: sum(calculo_Total_Distancia(cluster) for cluster in ind))
+# SA Simple con 2-Opt (Mejora local)
+def SA_Simple(ruta, temp=100, iteraciones=10):
+    if len(ruta) < 3: return ruta
+    curr = ruta[:]
+    best = ruta[:]
+    cost_b = calculo_Total_Distancia(best)
+    
+    for _ in range(iteraciones):
+        i, j = sorted(random.sample(range(len(curr)), 2))
+        new_r = curr[:i] + curr[i:j+1][::-1] + curr[j+1:] # 2-Opt
+        cost_n = calculo_Total_Distancia(new_r)
         
-        print(f"Generación {generacion + 1} - Mejor puntuación: {mejor_Puntuacion_Actual}")
-        print(f"Mejor ruta en esta generación:")
+        if cost_n < cost_b or random.random() < math.exp(-(cost_n - calculo_Total_Distancia(curr)) / temp):
+            curr = new_r
+            if cost_n < cost_b: best = curr[:]; cost_b = cost_n
+    return best
 
-        #Check de mehora significativa
-
-        if mejor_Puntuacion_Actual < mejor_Puntuacion_Global:
-            mejor_Puntuacion_Global = mejor_Puntuacion_Actual
-            mejor_solucion_Global = mejor_ruta_generacion
-            numero_De_Generacion = generacion
-            print(f"Nuevo óptimo global encontrado: {mejor_Puntuacion_Global}")
-            if determina_boole == True:
-                graficar_ruta(mejor_solucion_Global, numero_De_Generacion)
-                generaciones_Sin_Mejora = 0
-            else:
-                generaciones_Sin_Mejora = 0
+# --- 4. BUCLE PRINCIPAL SIMPLIFICADO ---
+def algoritmo_Genetico_Simple(clusters, pop_size, max_no_improve):
+    poblacion = generador_de_PI(clusters, pop_size)
+    mejor_global_fit = float('inf')
+    mejor_global_sol = None
+    sin_mejora = 0
+    
+    generacion = 0
+    while sin_mejora < max_no_improve:
+        generacion += 1
+        fits = [sum(calculo_Total_Distancia(r) for r in ind) for ind in poblacion]
+        
+        # Mejor local
+        mejor_idx = np.argmin(fits)
+        mejor_fit = fits[mejor_idx]
+        
+        print(f"Gen {generacion}: {mejor_fit:.2f} (Récord: {mejor_global_fit:.2f})")
+        
+        # Actualizar Global
+        if mejor_fit < mejor_global_fit:
+            mejor_global_fit = mejor_fit
+            mejor_global_sol = copy.deepcopy(poblacion[mejor_idx])
+            sin_mejora = 0
+            print(f"--> ¡Nuevo Récord! {mejor_global_fit:.2f}")
         else:
-            generaciones_Sin_Mejora += 1
+            sin_mejora += 1
+            
+        # Selección y Cruce
+        nueva_gen = []
+        nueva_gen.append(copy.deepcopy(mejor_global_sol)) # Elitismo simple
         
-        if generaciones_Sin_Mejora >= maximo_sin_mejora:
-            break
-
-        #Crear nueva generacion
-        generacion_Siguiente = []
-        for _ in range(tamaño_Poblacional // 2):
-            padre = seleccion_Ruleta(poblacion, puntuaciones)
-            madre = seleccion_Ruleta(poblacion, puntuaciones)
-            hijo1 = [crossover_Parametrizado_Uniforme(cluster1, cluster2) for cluster1, cluster2 in zip(padre,madre)]
-            hijo2 = [crossover_Parametrizado_Uniforme(cluster2, cluster1) for cluster1, cluster2 in zip(padre,madre)]
-            mutar(hijo1, prob_Mutar)
-            mutar(hijo2, prob_Mutar)
-            generacion_Siguiente.extend([hijo1, hijo2])
+        while len(nueva_gen) < pop_size:
+            p1 = seleccion_Torneo(poblacion, fits)
+            p2 = seleccion_Torneo(poblacion, fits)
+            
+            # Cruce Robusto
+            h1 = crossover_Robusto(p1, p2)
+            h2 = crossover_Robusto(p2, p1)
+            
+            # Mutaciones
+            mutar_orden(h1)
+            mutar_orden(h2)
+            mutar_transferencia(h1) # ¡Vital!
+            mutar_transferencia(h2) # ¡Vital!
+            
+            nueva_gen.extend([h1, h2])
+            
+        poblacion = nueva_gen[:pop_size]
         
+        # SA esporádico (para refinar, sin lógicas complejas)
+        if sin_mejora > 10:
+             # Aplicar SA al mejor de la poblacion actual para intentar empujarlo
+             idx = np.argmin(fits)
+             candidato = poblacion[idx]
+             for i in range(len(candidato)):
+                 candidato[i] = SA_Simple(candidato[i])
 
-        poblacion = generacion_Siguiente
+    return mejor_global_sol, mejor_global_fit, generacion
 
-    if mejor_Puntuacion_Global:
-        graficar_ruta(mejor_ruta_generacion, generacion) # <- Esta linea
+# Ejecución
+def leer_entero(mensaje, valor_por_defecto):
+    """Lee un entero y usa un valor por defecto si se deja vacío."""
+    entrada = input(f"{mensaje} [Default: {valor_por_defecto}]: ")
+    if entrada.strip() == "":
+        return valor_por_defecto
+    try:
+        return int(entrada)
+    except ValueError:
+        print(f"Entrada no válida. Usando valor por defecto: {valor_por_defecto}")
+        return valor_por_defecto
 
-    return mejor_solucion_Global, mejor_Puntuacion_Global, numero_De_Generacion
+# Pedir parámetros de forma segura
+tam_pop = leer_entero("Tamaño Población (100-150)", 150)
+max_no_imp = leer_entero("Max Generaciones sin mejora (50-100)", 80)
 
+print(f"--> Iniciando con Población: {tam_pop}, Max Sin Mejora: {max_no_imp}")
 
-
-tam_Poblacional = int(input("Defina el tamaño poblacional de las generaciones: "))
-max_mejora = int(input(f"Defina el maximo de generaciones sin tener una mejora: "))
-ver_Optimos = input("Determine con Y / N si desea ver los optimos cada que se encuentra uno nuevo: ")
-condicion_del_booleano = None
-if ver_Optimos == "Y":
-    condicion_del_booleano = True
-else:
-    condicion_del_booleano = False
-mejor_Ruta , mejor_Puntuacion, Numero_De_Generacion = algoritmo_Genetico(clusters, tam_Poblacional, max_mejora, condicion_del_booleano)
-print(f"Mejor ruta encontrada {mejor_Ruta}")
-print(f"Con una puntuacion de: {mejor_Puntuacion}")
-graficar_ruta(mejor_Ruta, Numero_De_Generacion)
+mejor_ruta, mejor_score, gen = algoritmo_Genetico_Simple(clusters_iniciales, tam_pop, max_no_imp)
+print(f"Final: {mejor_score:.2f}")
+graficar_ruta(mejor_ruta, gen)
